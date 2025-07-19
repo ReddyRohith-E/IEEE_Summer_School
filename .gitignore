@@ -108,10 +108,10 @@ ipython_config.py
 ~/.local/share/jupyter/runtime/
 
 # Data files
-*.csv
-*.tsv
-*.xls
-*.xlsx
+# *.csv
+# *.tsv
+# *.xls
+# *.xlsx
 *.h5
 *.hdf5
 *.db
@@ -130,7 +130,7 @@ ipython_config.py
 *.log
 
 # Images
-*.png
+# *.png
 *.jpg
 *.jpeg
 *.gif
