@@ -1,4 +1,4 @@
-
+# C:/Users/eredd/AppData/Local/Programs/Python/Python311/python.exe -m streamlit run c:\Users\eredd\Desktop\IEEE_Summer_School\streamlit_dashboard.py
 import streamlit as st
 import pandas as pd
 import numpy as np
