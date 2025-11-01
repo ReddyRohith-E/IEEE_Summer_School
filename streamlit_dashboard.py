@@ -17,11 +17,21 @@ st.set_page_config(
 )
 
 # Title
-st.title("⚡ IEEE 30-Bus System: Spatiotemporal XAI for N-1 Contingency Analysis")
+st.title("⚡ IEEE 30-Bus System: Full Contingency Analysis with Instant XAI")
 st.markdown("### Real-Time Power System Monitoring with Explainable AI")
+
+# Enhanced Problem Statement
 st.markdown("""
-**Problem**: Operators need to predict line flows and stability for 41 contingencies **instantly** when new data arrives.  
-**Solution**: Multi-task deep learning with XAI explanations for trusted decision-making (300-600× faster than traditional methods).
+**THE PROBLEM**: Power system operators face a critical challenge:
+- **Manual Analysis Time**: Traditional N-1 contingency analysis takes 5-10 minutes per scenario
+- **Real-Time Requirements**: Operators need instant predictions when new data arrives
+- **Scale**: 41 transmission lines × 1,000 scenarios = 41,000 contingency cases to analyze
+- **Consequences**: Delayed response can lead to cascading failures and blackouts
+
+**OUR SOLUTION**: 
+- Multi-task deep learning predicts line flows and stability **instantly** (<1 second)
+- **300-600× faster** than traditional power flow calculations
+- XAI provides explanations to build operator trust and enable regulatory compliance
 """)
 
 # Sidebar
@@ -31,13 +41,15 @@ st.sidebar.markdown("---")
 # IEEE 30-Bus System Info
 st.sidebar.subheader("🔌 System Overview")
 st.sidebar.info("""
-**IEEE 30-Bus System**
-- 30 buses (nodes)
-- 41 transmission lines
-- 20 load points
-- 6 generator buses
-- Base: 132 kV
-- Dataset: 41,000 scenarios
+**IEEE 30-Bus Test System**
+- **Buses (Nodes)**: 30 substations
+- **Lines (Branches)**: 41 transmission lines
+- **Load Points**: 20 active loads
+- **Generators**: 6 generator buses
+- **Voltage Base**: 132 kV
+- **Dataset**: 41,000 scenarios
+  - 1,000 base scenarios
+  - 41 N-1 contingencies each
 """)
 
 # Load data function
@@ -88,7 +100,7 @@ def load_data():
     return model_results, xai_results, counterfactual_stats, contingency_data
 
 def create_ieee30_network_graph():
-    """Create IEEE 30-bus network topology for visualization"""
+    """Create IEEE 30-bus network topology for visualization with load data"""
     G = nx.Graph()
     
     # IEEE 30-bus topology (simplified representation)
@@ -105,10 +117,16 @@ def create_ieee30_network_graph():
         (27, 28, 40)
     ]
     
+    # Add bus load information (sample data - replace with actual data if available)
+    bus_loads = {}
+    for bus in range(30):
+        # Simulate load levels (in MW)
+        bus_loads[bus] = np.random.uniform(0.0, 2.5)
+    
     for from_bus, to_bus, line_id in lines:
         G.add_edge(from_bus, to_bus, line_id=line_id)
     
-    return G, lines
+    return G, lines, bus_loads
 
 def get_load_color(loading_pct):
     """Get color based on line loading percentage"""
@@ -120,6 +138,17 @@ def get_load_color(loading_pct):
         return 'orange', 'Critical'
     else:
         return 'red', 'Overload'
+
+def get_bus_load_color(load_mw):
+    """Get color based on bus load in MW"""
+    if load_mw < 1.0:
+        return 'lightblue', 'Low Load'
+    elif load_mw < 1.5:
+        return 'lightgreen', 'Normal Load'
+    elif load_mw < 2.0:
+        return 'orange', 'High Load'
+    else:
+        return 'red', 'Very High Load'
 
 # Load data
 model_results, xai_results, counterfactual_stats, contingency_data = load_data()
@@ -151,6 +180,7 @@ xai_method = st.sidebar.selectbox(
 st.sidebar.markdown("---")
 st.sidebar.subheader("⚙️ Simulation Controls")
 simulate_scenario = st.sidebar.checkbox("Enable Real-Time Simulation", value=False)
+color_nodes_by_load = st.sidebar.checkbox("Color buses by load (P)", value=True)
 
 if simulate_scenario:
     scenario_id = st.sidebar.slider("Scenario ID", 0, 999, 0)
@@ -161,7 +191,7 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🏠 System Overview", 
     "📊 Model Performance", 
     "🔍 XAI Analysis", 
-    "� Counterfactuals",
+    "🔄 Counterfactuals",
     "⚡ Real-Time Prediction",
     "📋 Summary Report"
 ])
@@ -175,7 +205,7 @@ with tab1:
         st.subheader("Single Line Diagram")
         
         # Create network visualization
-        G, lines = create_ieee30_network_graph()
+        G, lines, bus_loads = create_ieee30_network_graph()
         
         # Generate positions for visualization
         pos = nx.spring_layout(G, k=2, iterations=50, seed=42)
@@ -202,18 +232,35 @@ with tab1:
                 )
             )
         
+        # Node colors by load (if enabled)
+        if color_nodes_by_load and bus_loads:
+            node_vals = [float(bus_loads.get(node, 0.0)) for node in G.nodes()]
+            vmin, vmax = (min(node_vals), max(node_vals)) if node_vals else (0.0, 1.0)
+            marker_kwargs = dict(
+                size=15,
+                color=node_vals,
+                colorscale='YlOrRd',
+                showscale=True,
+                colorbar=dict(title="P (MW)"),
+                line=dict(width=2, color='darkblue')
+            )
+            hover_text = [f'Bus {node} | P={bus_loads.get(node,0):.2f} MW' for node in G.nodes()]
+        else:
+            marker_kwargs = dict(
+                size=15,
+                color='lightblue',
+                line=dict(width=2, color='darkblue')
+            )
+            hover_text = [f'Bus {node}' for node in G.nodes()]
+
         node_trace = go.Scatter(
             x=[pos[node][0] for node in G.nodes()],
             y=[pos[node][1] for node in G.nodes()],
             mode='markers+text',
             hoverinfo='text',
-            text=[f'Bus {node}' for node in G.nodes()],
+            text=hover_text,
             textposition="top center",
-            marker=dict(
-                size=15,
-                color='lightblue',
-                line=dict(width=2, color='darkblue')
-            ),
+            marker=marker_kwargs,
             showlegend=False
         )
         
@@ -235,7 +282,7 @@ with tab1:
         col_a.markdown("🟢 **Safe** (< 70%)")
         col_b.markdown("🟡 **Warning** (70-85%)")
         col_c.markdown("🟠 **Critical** (85-98%)")
-        col_d.markdown("� **Overload** (≥ 98%)")
+        col_d.markdown("🔴 **Overload** (≥ 98%)")
     
     with col2:
         st.subheader("System Statistics")
@@ -251,12 +298,12 @@ with tab1:
         st.subheader("Data Dimensions")
         st.info("""
         **41,000 rows** = 1,000 scenarios × 41 contingencies
-        
-        **111 features**:
+
+        **71 features**:
         - 20 Active loads (P_load)
         - 20 Reactive loads (Q_load)
         - 30 Bus voltages (V_bus)
-        - 41 Line loadings (%)
+        - 1 Outage indicator (line id)
         """)
         
         st.markdown("---")
@@ -864,6 +911,15 @@ Required Changes to Flip:
 with tab5:
     st.header("⚡ Real-Time Contingency Prediction")
     
+    # Show compact global metrics for operator context
+    if 'model_results' in globals() and not model_results.empty:
+        top_model = model_results.loc[model_results['F1'].idxmax()]
+        c1, c2 = st.columns(2)
+        with c1:
+            st.metric("Global Accuracy", f"{top_model['Accuracy']:.2%}")
+        with c2:
+            st.metric("Global NDCG@5", f"{top_model['NDCG@5']:.2%}")
+
     st.markdown("""
     **Operator Workflow**: Model predicts stability and ranks lines **in <1 second**, with XAI explanations for trusted decision-making.
     """)
@@ -1223,10 +1279,10 @@ with tab6:
         2. **Load Variation**: Monte Carlo (±30%)
         3. **N-1 Simulation**: 41 lines × 1000 scenarios
         4. **Power Flow**: Newton-Raphson method
-        5. **Features**: 111 (loads, voltages, line flows)
+        5. **Features**: 71 (loads, voltages, outage indicator)
         6. **Labels**: Stable/Unstable + severity ranking
         
-        **Result**: 41,000 × 111 balanced dataset
+        **Result**: 41,000 × 71 balanced dataset
         """)
         
         st.markdown("**Deep Learning Models**")
